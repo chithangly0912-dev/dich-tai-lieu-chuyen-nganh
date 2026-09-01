@@ -1,35 +1,32 @@
 """
 FastAPI backend for the PDF -> Vietnamese specialized-document translator.
 
-Flow:
-  1. POST /api/jobs           - upload a PDF, get back a job_id, translation
-                                 starts running in a background thread.
-  2. GET  /api/jobs/{job_id}  - poll progress (stage/current/total/message).
-  3. GET  /api/jobs/{job_id}/download - download the finished PDF.
+Single synchronous endpoint: POST /api/translate takes a PDF, translates it
+end-to-end, and returns the translated PDF directly in the response. This
+shape works identically whether self-hosted with `uvicorn main:app` or
+deployed as a Vercel serverless function (see ../api/index.py, which shares
+this same backend/ code) - no background jobs, no in-memory/disk state that
+needs to survive across requests.
 
 The frontend (a static single-page app) is served from /.
 """
 from __future__ import annotations
 
 import os
-import shutil
-import threading
-import time
-import uuid
+import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
 from deepseek_client import TranslationError
 from pdf_translator import translate_pdf
 
 BACKEND_DIR = Path(__file__).resolve().parent
-STORAGE_DIR = BACKEND_DIR / "storage"
-STORAGE_DIR.mkdir(exist_ok=True)
 FRONTEND_DIR = BACKEND_DIR.parent / "frontend"
 
 # .env can live next to main.py (backend/.env) or at the project root -
@@ -53,72 +50,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------------------------
-# In-memory job registry. Fine for a single-process local/self-hosted app;
-# swap for Redis/a DB if you ever need multi-worker deployment.
-# ---------------------------------------------------------------------------
-_jobs_lock = threading.Lock()
-_jobs: dict[str, dict] = {}
+
+@app.get("/api/health")
+async def health():
+    return {"ok": True, "has_default_api_key": bool(DEFAULT_API_KEY)}
 
 
-def _new_job(filename: str) -> str:
-    job_id = uuid.uuid4().hex
-    job_dir = STORAGE_DIR / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-    with _jobs_lock:
-        _jobs[job_id] = {
-            "id": job_id,
-            "filename": filename,
-            "status": "queued",
-            "stage": "queued",
-            "current": 0,
-            "total": 0,
-            "message": "Đang chờ xử lý...",
-            "error": None,
-            "result": None,
-            "created_at": time.time(),
-        }
-    return job_id
-
-
-def _update_job(job_id: str, **fields) -> None:
-    with _jobs_lock:
-        if job_id in _jobs:
-            _jobs[job_id].update(fields)
-
-
-def _get_job(job_id: str) -> dict:
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-        if job is None:
-            raise HTTPException(status_code=404, detail="Không tìm thấy job.")
-        return dict(job)
-
-
-def _run_job(job_id: str, input_path: str, output_path: str, api_key: str, base_url: str, model: str) -> None:
-    _update_job(job_id, status="running", stage="starting")
-
-    def on_progress(stage: str, current: int, total: int, message: str) -> None:
-        _update_job(job_id, stage=stage, current=current, total=total, message=message)
-
-    try:
-        stats = translate_pdf(
-            input_path,
-            output_path,
-            api_key=api_key,
-            on_progress=on_progress,
-            deepseek_base_url=base_url,
-            deepseek_model=model,
-        )
-        _update_job(job_id, status="done", stage="done", result=stats, message="Hoàn tất.")
-    except TranslationError as exc:
-        _update_job(job_id, status="error", stage="error", error=str(exc))
-    except Exception as exc:  # noqa: BLE001 - surface any unexpected error to the UI
-        _update_job(job_id, status="error", stage="error", error=f"Lỗi không mong muốn: {exc}")
-
-
-@app.post("/api/jobs")
-async def create_job(
+@app.post("/api/translate")
+async def translate(
     file: UploadFile = File(...),
     api_key: str | None = Form(None),
     deepseek_base_url: str | None = Form(None),
@@ -145,62 +84,39 @@ async def create_job(
             ),
         )
 
-    job_id = _new_job(file.filename)
-    job_dir = STORAGE_DIR / job_id
-    input_path = job_dir / "input.pdf"
-    output_path = job_dir / "translated_vi.pdf"
-    input_path.write_bytes(contents)
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        input_path = os.path.join(tmp_dir, "input.pdf")
+        output_path = os.path.join(tmp_dir, "translated_vi.pdf")
+        with open(input_path, "wb") as f:
+            f.write(contents)
 
-    thread = threading.Thread(
-        target=_run_job,
-        args=(
-            job_id,
-            str(input_path),
-            str(output_path),
-            effective_key,
-            (deepseek_base_url or "").strip() or DEFAULT_BASE_URL,
-            (deepseek_model or "").strip() or DEFAULT_MODEL,
-        ),
-        daemon=True,
+        try:
+            translate_pdf(
+                input_path,
+                output_path,
+                api_key=effective_key,
+                deepseek_base_url=(deepseek_base_url or "").strip() or DEFAULT_BASE_URL,
+                deepseek_model=(deepseek_model or "").strip() or DEFAULT_MODEL,
+            )
+        except TranslationError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001 - surface any unexpected error to the UI
+            raise HTTPException(status_code=500, detail=f"Lỗi không mong muốn: {exc}") from exc
+
+        with open(output_path, "rb") as f:
+            translated_bytes = f.read()
+
+    download_name = f"{Path(file.filename).stem}_vi.pdf"
+    # HTTP headers must be latin-1; the filename can contain Vietnamese/
+    # Chinese characters (from the uploaded file's own name), so send both
+    # an ASCII fallback and an RFC 6266 UTF-8 filename* per the header spec.
+    ascii_fallback = download_name.encode("ascii", "ignore").decode("ascii") or "translated_vi.pdf"
+    content_disposition = f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(download_name)}"
+    return Response(
+        content=translated_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": content_disposition},
     )
-    thread.start()
-
-    return {"job_id": job_id}
-
-
-@app.get("/api/jobs/{job_id}")
-async def get_job(job_id: str):
-    job = _get_job(job_id)
-    return JSONResponse(job)
-
-
-@app.get("/api/jobs/{job_id}/download")
-async def download_job(job_id: str):
-    job = _get_job(job_id)
-    if job["status"] != "done":
-        raise HTTPException(status_code=409, detail="Bản dịch chưa hoàn tất.")
-    output_path = STORAGE_DIR / job_id / "translated_vi.pdf"
-    if not output_path.exists():
-        raise HTTPException(status_code=404, detail="Không tìm thấy file kết quả.")
-
-    base_name = Path(job["filename"]).stem
-    download_name = f"{base_name}_vi.pdf"
-    return FileResponse(str(output_path), media_type="application/pdf", filename=download_name)
-
-
-@app.delete("/api/jobs/{job_id}")
-async def delete_job(job_id: str):
-    _get_job(job_id)  # 404s if missing
-    job_dir = STORAGE_DIR / job_id
-    shutil.rmtree(job_dir, ignore_errors=True)
-    with _jobs_lock:
-        _jobs.pop(job_id, None)
-    return {"ok": True}
-
-
-@app.get("/api/health")
-async def health():
-    return {"ok": True, "has_default_api_key": bool(DEFAULT_API_KEY)}
 
 
 # Serve the frontend last so it doesn't shadow the /api/* routes above.

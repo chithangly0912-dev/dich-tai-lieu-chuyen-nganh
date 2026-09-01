@@ -131,6 +131,14 @@
     width: 0%;
     transition: width 0.25s ease;
   }
+  .progress-bar-fill.indeterminate {
+    width: 40% !important;
+    animation: progress-indeterminate 1.2s ease-in-out infinite;
+  }
+  @keyframes progress-indeterminate {
+    0% { margin-left: -40%; }
+    100% { margin-left: 100%; }
+  }
   .progress-label {
     font-size: 13px;
     color: var(--muted);
@@ -199,7 +207,7 @@
     <h2>1. Chọn file PDF</h2>
     <div class="dropzone" id="dropzone">
       <p><strong>Kéo thả file vào đây</strong> hoặc bấm để chọn file</p>
-      <p class="hint">Chỉ hỗ trợ .pdf — tối đa ~60MB (tuỳ cấu hình server)</p>
+      <p class="hint">Chỉ hỗ trợ .pdf — tối đa ~60MB (tuỳ cấu hình server). Trên bản deploy Vercel (gói Hobby), mỗi lần dịch giới hạn ~60 giây xử lý nên chỉ phù hợp file ngắn/ít trang.</p>
       <div id="fileChipWrap"></div>
     </div>
     <input type="file" id="fileInput" accept="application/pdf" hidden />
@@ -310,8 +318,6 @@ changeApiKeyBtn.addEventListener('click', () => {
 });
 
 let selectedFile = null;
-let currentJobId = null;
-let pollTimer = null;
 
 function resetOutputPanels() {
   errorBox.style.display = 'none';
@@ -321,6 +327,7 @@ function resetOutputPanels() {
   statusBadge.textContent = '';
   statusBadge.className = 'status-badge';
   progressWrap.style.display = 'none';
+  progressFill.classList.remove('indeterminate');
   progressFill.style.width = '0%';
 }
 
@@ -349,19 +356,6 @@ fileInput.addEventListener('change', () => {
   if (fileInput.files && fileInput.files[0]) pickFile(fileInput.files[0]);
 });
 
-const STAGE_LABELS = {
-  queued: 'Đang chờ xử lý...',
-  starting: 'Đang khởi động...',
-  opening: 'Đang mở file PDF...',
-  detecting_language: 'Đang phát hiện ngôn ngữ nguồn...',
-  extracting: 'Đang trích xuất bố cục PDF...',
-  translating: 'Đang dịch nội dung...',
-  rebuilding: 'Đang dựng lại file PDF...',
-  saving: 'Đang lưu file kết quả...',
-  done: 'Hoàn tất!',
-  error: 'Có lỗi xảy ra',
-};
-
 function setBadge(status) {
   statusBadge.className = 'status-badge ' + status;
   statusBadge.textContent = status === 'running' ? 'Đang xử lý'
@@ -370,63 +364,21 @@ function setBadge(status) {
     : status;
 }
 
-async function pollJob(jobId) {
-  try {
-    const res = await fetch(`${API_BASE}/api/jobs/${jobId}`);
-    if (!res.ok) throw new Error('Không thể lấy trạng thái job');
-    const job = await res.json();
-
-    progressWrap.style.display = 'block';
-    const pct = job.total > 0 ? Math.round((job.current / job.total) * 100) : (job.status === 'done' ? 100 : 5);
-    progressFill.style.width = pct + '%';
-    const label = STAGE_LABELS[job.stage] || job.message || job.stage;
-    progressLabel.textContent = job.total > 0
-      ? `${label} (${job.current}/${job.total})`
-      : label;
-
-    setBadge(job.status);
-
-    if (job.status === 'done') {
-      clearInterval(pollTimer);
-      translateBtn.disabled = false;
-      translateBtn.textContent = 'Bắt đầu dịch';
-      const stats = job.result || {};
-      resultBox.style.display = 'block';
-      resultBox.innerHTML = `
-        <strong>Dịch xong!</strong>
-        <ul class="stats-list">
-          <li>Ngôn ngữ nguồn phát hiện: <strong>${stats.source_lang === 'zh' ? 'Tiếng Trung' : 'Tiếng Anh'}</strong></li>
-          <li>Số trang: ${stats.page_count ?? '-'}</li>
-          <li>Số đoạn văn bản đã dịch: ${stats.translated_block_count ?? '-'} / ${stats.block_count ?? '-'}</li>
-        </ul>
-        <div style="margin-top:12px;">
-          <button id="downloadBtn">⬇️ Tải file PDF đã dịch</button>
-        </div>
-      `;
-      document.getElementById('downloadBtn').addEventListener('click', () => {
-        window.location.href = `${API_BASE}/api/jobs/${jobId}/download`;
-      });
-    } else if (job.status === 'error') {
-      clearInterval(pollTimer);
-      translateBtn.disabled = false;
-      translateBtn.textContent = 'Bắt đầu dịch';
-      errorBox.style.display = 'block';
-      errorBox.textContent = job.error || 'Đã có lỗi không xác định xảy ra.';
-    }
-  } catch (err) {
-    clearInterval(pollTimer);
-    translateBtn.disabled = false;
-    translateBtn.textContent = 'Bắt đầu dịch';
-    errorBox.style.display = 'block';
-    errorBox.textContent = 'Lỗi khi theo dõi tiến trình: ' + err.message;
-  }
+function parseDownloadFilename(res, fallback) {
+  const header = res.headers.get('Content-Disposition') || '';
+  const match = header.match(/filename="?([^";]+)"?/);
+  return match ? match[1] : fallback;
 }
 
 translateBtn.addEventListener('click', async () => {
   if (!selectedFile) return;
   resetOutputPanels();
   translateBtn.disabled = true;
-  translateBtn.textContent = 'Đang tải lên...';
+  translateBtn.textContent = 'Đang dịch...';
+  progressWrap.style.display = 'block';
+  progressFill.classList.add('indeterminate');
+  progressLabel.textContent = 'Đang dịch, việc này có thể mất từ vài chục giây đến vài phút tuỳ độ dài file...';
+  setBadge('running');
 
   const formData = new FormData();
   formData.append('file', selectedFile);
@@ -435,17 +387,38 @@ translateBtn.addEventListener('click', async () => {
   if (modelInput.value.trim()) formData.append('deepseek_model', modelInput.value.trim());
 
   try {
-    const res = await fetch(`${API_BASE}/api/jobs`, { method: 'POST', body: formData });
-    const data = await res.json();
+    const res = await fetch(`${API_BASE}/api/translate`, { method: 'POST', body: formData });
     if (!res.ok) {
-      throw new Error(data.detail || 'Không thể tạo job dịch.');
+      let detail = 'Không thể dịch file.';
+      try {
+        const data = await res.json();
+        detail = data.detail || detail;
+      } catch (e) { /* non-JSON error body — keep default message */ }
+      throw new Error(detail);
     }
-    currentJobId = data.job_id;
-    translateBtn.textContent = 'Đang dịch...';
-    progressWrap.style.display = 'block';
-    pollTimer = setInterval(() => pollJob(currentJobId), 1200);
-    pollJob(currentJobId);
+
+    const blob = await res.blob();
+    const downloadName = parseDownloadFilename(res, `${selectedFile.name.replace(/\.pdf$/i, '')}_vi.pdf`);
+    const url = URL.createObjectURL(blob);
+
+    progressFill.classList.remove('indeterminate');
+    progressFill.style.width = '100%';
+    progressLabel.textContent = 'Hoàn tất!';
+    setBadge('done');
+
+    resultBox.style.display = 'block';
+    resultBox.innerHTML = `
+      <strong>Dịch xong!</strong>
+      <div style="margin-top:12px;">
+        <a id="downloadLink" href="${url}" download="${downloadName}"><button type="button">⬇️ Tải file PDF đã dịch</button></a>
+      </div>
+    `;
+
+    translateBtn.disabled = false;
+    translateBtn.textContent = 'Bắt đầu dịch';
   } catch (err) {
+    progressWrap.style.display = 'none';
+    setBadge('error');
     translateBtn.disabled = false;
     translateBtn.textContent = 'Bắt đầu dịch';
     errorBox.style.display = 'block';

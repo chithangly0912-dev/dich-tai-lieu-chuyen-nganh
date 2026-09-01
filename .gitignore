@@ -3,6 +3,4 @@ __pycache__/
 .venv/
 venv/
 .env
-backend/storage/*
-!backend/storage/.gitkeep
 .DS_Store
