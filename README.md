@@ -122,6 +122,28 @@ Chi phí phụ thuộc vào bảng giá DeepSeek API hiện hành và độ dài
 mỗi lần gọi) để giảm số lượt gọi và tăng tốc độ dịch cho các tài liệu
 nhiều trang.
 
+## Triển khai frontend (Vercel) + backend riêng
+
+App backend dùng background thread, lưu job trong RAM và file tạm trên đĩa,
+nên **không** chạy được như một Vercel serverless function (stateless, không
+persistent, có giới hạn thời gian chạy mỗi request). Cách triển khai phù hợp:
+
+1. **Backend**: deploy `backend/` lên một nơi hỗ trợ chạy process liên tục,
+   ví dụ Render, Railway, Fly.io, hoặc VPS — chạy đúng lệnh
+   `uvicorn main:app --host 0.0.0.0 --port $PORT`, nhớ đặt biến môi trường
+   `DEEPSEEK_API_KEY` (nếu muốn có key mặc định trên server).
+2. **Frontend**: deploy `frontend/` lên Vercel (repo đã có `vercel.json` với
+   `outputDirectory: "frontend"`). Sau khi có URL backend, sửa
+   `frontend/config.js`:
+   ```js
+   window.API_BASE_URL = "https://ten-backend-cua-ban.onrender.com";
+   ```
+   rồi commit + deploy lại frontend.
+
+Nếu chạy tự host kiểu cũ (uvicorn phục vụ luôn cả frontend, mục "Chạy ứng
+dụng" ở trên) thì giữ nguyên `window.API_BASE_URL = ""` trong `config.js` —
+lúc đó API sẽ gọi cùng origin như trước.
+
 ## Khắc phục sự cố
 
 - **"Thiếu DEEPSEEK_API_KEY"**: đặt biến môi trường trong file `.env` hoặc
@@ -132,4 +154,10 @@ nhiều trang.
   cục rất dày đặc; xem lại mục "Giới hạn đã biết" ở trên.
 - **File quá lớn bị từ chối**: tăng biến môi trường `MAX_UPLOAD_MB` trong
   `.env`.
+- **Lỗi `Unexpected token 'T', "The page c"... is not valid JSON` khi bấm
+  "Bắt đầu dịch" trên bản deploy Vercel**: frontend đang gọi `/api/jobs`
+  cùng origin nhưng Vercel không có backend nào trả lời ở đó (chỉ nhận
+  được trang 404 HTML mặc định của Vercel). Xem mục "Triển khai frontend
+  (Vercel) + backend riêng" ở trên — cần deploy backend ở nơi khác rồi trỏ
+  `frontend/config.js` (`window.API_BASE_URL`) tới URL backend đó.
 "# dich-tai-lieu-chuyen-nganh" 

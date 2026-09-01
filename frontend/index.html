@@ -176,6 +176,16 @@
   }
   a { color: var(--accent); }
 </style>
+
+<!--
+  When the frontend is deployed separately from the backend (e.g. frontend on
+  Vercel, backend on Render/Railway/Fly.io/a VPS), set window.API_BASE_URL in
+  config.js to the backend's full URL (no trailing slash), e.g.:
+    window.API_BASE_URL = "https://your-backend.onrender.com";
+  Leave it empty when the backend serves this file itself (the default
+  `uvicorn main:app` self-hosted setup), so API calls stay same-origin.
+-->
+<script src="config.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -265,6 +275,7 @@ const apiKeySavedRow = document.getElementById('apiKeySavedRow');
 const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
 const changeApiKeyBtn = document.getElementById('changeApiKeyBtn');
 const API_KEY_STORAGE_KEY = 'deepseek_api_key';
+const API_BASE = (window.API_BASE_URL || '').replace(/\/$/, '');
 
 function showApiKeySavedState() {
   apiKeyEntryRow.style.display = 'none';
@@ -361,7 +372,7 @@ function setBadge(status) {
 
 async function pollJob(jobId) {
   try {
-    const res = await fetch(`/api/jobs/${jobId}`);
+    const res = await fetch(`${API_BASE}/api/jobs/${jobId}`);
     if (!res.ok) throw new Error('Không thể lấy trạng thái job');
     const job = await res.json();
 
@@ -393,7 +404,7 @@ async function pollJob(jobId) {
         </div>
       `;
       document.getElementById('downloadBtn').addEventListener('click', () => {
-        window.location.href = `/api/jobs/${jobId}/download`;
+        window.location.href = `${API_BASE}/api/jobs/${jobId}/download`;
       });
     } else if (job.status === 'error') {
       clearInterval(pollTimer);
@@ -424,7 +435,7 @@ translateBtn.addEventListener('click', async () => {
   if (modelInput.value.trim()) formData.append('deepseek_model', modelInput.value.trim());
 
   try {
-    const res = await fetch('/api/jobs', { method: 'POST', body: formData });
+    const res = await fetch(`${API_BASE}/api/jobs`, { method: 'POST', body: formData });
     const data = await res.json();
     if (!res.ok) {
       throw new Error(data.detail || 'Không thể tạo job dịch.');
