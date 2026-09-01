@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dịch PDF chuyên ngành sang Tiếng Việt</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --text: #1a1d23;
+    --muted: #667085;
+    --border: #e3e6ea;
+    --accent: #2563eb;
+    --accent-dark: #1d4ed8;
+    --success: #16a34a;
+    --error: #dc2626;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 32px 16px 80px;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 24px;
+    margin: 0 0 4px;
+  }
+  .subtitle {
+    color: var(--muted);
+    margin: 0 0 28px;
+    font-size: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 14px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 36px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: #f0f5ff;
+  }
+  .dropzone p { margin: 6px 0; }
+  .dropzone .hint { color: var(--muted); font-size: 13px; }
+  .file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #eef2ff;
+    color: var(--accent-dark);
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    margin-top: 10px;
+  }
+  label.field-label {
+    display: block;
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: #fff;
+  }
+  .advanced summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-size: 13px;
+    margin-bottom: 12px;
+  }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  .actions { margin-top: 20px; display: flex; gap: 12px; align-items: center; }
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 12px 22px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover:not(:disabled) { background: var(--accent-dark); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border);
+  }
+  .progress-wrap { margin-top: 8px; }
+  .progress-bar-bg {
+    height: 10px;
+    background: #eceef1;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.25s ease;
+  }
+  .progress-label {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .status-badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+  .status-badge.running { background: #fef3c7; color: #92400e; }
+  .status-badge.done { background: #dcfce7; color: #166534; }
+  .status-badge.error { background: #fee2e2; color: #991b1b; }
+  .error-box {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: var(--error);
+    padding: 14px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-top: 14px;
+    white-space: pre-wrap;
+  }
+  .result-box {
+    margin-top: 14px;
+    padding: 16px;
+    border-radius: 8px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    font-size: 13px;
+    color: #14532d;
+  }
+  .stats-list { margin: 8px 0 0; padding-left: 18px; }
+  footer {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 40px;
+  }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Dịch PDF chuyên ngành sang Tiếng Việt</h1>
+  <p class="subtitle">
+    Tải lên file PDF tiếng Anh hoặc tiếng Trung (tự động phát hiện ngôn ngữ) &rarr;
+    nhận lại file PDF đã dịch sang tiếng Việt, giữ nguyên bố cục/bảng biểu/hình ảnh ở mức tốt nhất có thể.
+  </p>
+
+  <div class="card">
+    <h2>1. Chọn file PDF</h2>
+    <div class="dropzone" id="dropzone">
+      <p><strong>Kéo thả file vào đây</strong> hoặc bấm để chọn file</p>
+      <p class="hint">Chỉ hỗ trợ .pdf — tối đa ~60MB (tuỳ cấu hình server)</p>
+      <div id="fileChipWrap"></div>
+    </div>
+    <input type="file" id="fileInput" accept="application/pdf" hidden />
+  </div>
+
+  <div class="card">
+    <h2>2. Cấu hình dịch (tuỳ chọn)</h2>
+    <details class="advanced" id="advancedDetails">
+      <summary>Nhập DeepSeek API key riêng / tuỳ chỉnh nâng cao</summary>
+      <div id="apiKeyEntryRow">
+        <label class="field-label" for="apiKeyInput">
+          DeepSeek API key (bỏ trống nếu server đã cấu hình sẵn <code>DEEPSEEK_API_KEY</code>)
+        </label>
+        <div style="display:flex; gap:8px;">
+          <input type="password" id="apiKeyInput" placeholder="sk-..." autocomplete="off" style="flex:1;" />
+          <button type="button" id="saveApiKeyBtn" class="secondary">Lưu</button>
+        </div>
+      </div>
+      <div id="apiKeySavedRow" style="display:none; align-items:center; gap:10px;">
+        <span class="file-chip" style="margin-top:0;">🔑 Đã lưu API key</span>
+        <button type="button" id="changeApiKeyBtn" class="secondary" style="padding:6px 12px; font-size:13px;">Đổi key</button>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <div>
+          <label class="field-label" for="baseUrlInput">Base URL</label>
+          <input type="text" id="baseUrlInput" placeholder="https://api.deepseek.com" />
+        </div>
+        <div>
+          <label class="field-label" for="modelInput">Model</label>
+          <input type="text" id="modelInput" placeholder="deepseek-chat" />
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>3. Dịch &amp; tải kết quả</h2>
+    <div class="actions">
+      <button id="translateBtn" disabled>Bắt đầu dịch</button>
+      <span id="statusBadge"></span>
+    </div>
+
+    <div class="progress-wrap" id="progressWrap" style="display:none;">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel">Đang chờ...</div>
+    </div>
+
+    <div id="errorBox" class="error-box" style="display:none;"></div>
+    <div id="resultBox" class="result-box" style="display:none;"></div>
+  </div>
+
+  <footer>
+    Dịch bằng DeepSeek API &middot; Font Noto Sans (hỗ trợ đầy đủ dấu tiếng Việt) &middot; Xem README.md để biết giới hạn của công cụ.
+  </footer>
+</div>
+
+<script>
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const fileChipWrap = document.getElementById('fileChipWrap');
+const translateBtn = document.getElementById('translateBtn');
+const statusBadge = document.getElementById('statusBadge');
+const progressWrap = document.getElementById('progressWrap');
+const progressFill = document.getElementById('progressFill');
+const progressLabel = document.getElementById('progressLabel');
+const errorBox = document.getElementById('errorBox');
+const resultBox = document.getElementById('resultBox');
+const apiKeyInput = document.getElementById('apiKeyInput');
+const baseUrlInput = document.getElementById('baseUrlInput');
+const modelInput = document.getElementById('modelInput');
+const apiKeyEntryRow = document.getElementById('apiKeyEntryRow');
+const apiKeySavedRow = document.getElementById('apiKeySavedRow');
+const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+const changeApiKeyBtn = document.getElementById('changeApiKeyBtn');
+const API_KEY_STORAGE_KEY = 'deepseek_api_key';
+
+function showApiKeySavedState() {
+  apiKeyEntryRow.style.display = 'none';
+  apiKeySavedRow.style.display = 'flex';
+}
+function showApiKeyEntryState() {
+  apiKeyEntryRow.style.display = 'block';
+  apiKeySavedRow.style.display = 'none';
+}
+
+try {
+  const savedKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+  if (savedKey) {
+    apiKeyInput.value = savedKey;
+    showApiKeySavedState();
+  }
+} catch (e) { /* localStorage unavailable — ignore, entry row stays visible */ }
+
+saveApiKeyBtn.addEventListener('click', () => {
+  const val = apiKeyInput.value.trim();
+  if (!val) {
+    alert('Vui lòng nhập API key trước khi lưu.');
+    return;
+  }
+  try { localStorage.setItem(API_KEY_STORAGE_KEY, val); } catch (e) { /* ignore */ }
+  showApiKeySavedState();
+});
+
+changeApiKeyBtn.addEventListener('click', () => {
+  showApiKeyEntryState();
+  apiKeyInput.focus();
+});
+
+let selectedFile = null;
+let currentJobId = null;
+let pollTimer = null;
+
+function resetOutputPanels() {
+  errorBox.style.display = 'none';
+  errorBox.textContent = '';
+  resultBox.style.display = 'none';
+  resultBox.innerHTML = '';
+  statusBadge.textContent = '';
+  statusBadge.className = 'status-badge';
+  progressWrap.style.display = 'none';
+  progressFill.style.width = '0%';
+}
+
+function pickFile(file) {
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    alert('Chỉ hỗ trợ file .pdf');
+    return;
+  }
+  selectedFile = file;
+  const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+  fileChipWrap.innerHTML = `<div class="file-chip">📄 ${file.name} &middot; ${sizeMb} MB</div>`;
+  translateBtn.disabled = false;
+  resetOutputPanels();
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('dragover');
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) pickFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files && fileInput.files[0]) pickFile(fileInput.files[0]);
+});
+
+const STAGE_LABELS = {
+  queued: 'Đang chờ xử lý...',
+  starting: 'Đang khởi động...',
+  opening: 'Đang mở file PDF...',
+  detecting_language: 'Đang phát hiện ngôn ngữ nguồn...',
+  extracting: 'Đang trích xuất bố cục PDF...',
+  translating: 'Đang dịch nội dung...',
+  rebuilding: 'Đang dựng lại file PDF...',
+  saving: 'Đang lưu file kết quả...',
+  done: 'Hoàn tất!',
+  error: 'Có lỗi xảy ra',
+};
+
+function setBadge(status) {
+  statusBadge.className = 'status-badge ' + status;
+  statusBadge.textContent = status === 'running' ? 'Đang xử lý'
+    : status === 'done' ? 'Hoàn tất'
+    : status === 'error' ? 'Lỗi'
+    : status;
+}
+
+async function pollJob(jobId) {
+  try {
+    const res = await fetch(`/api/jobs/${jobId}`);
+    if (!res.ok) throw new Error('Không thể lấy trạng thái job');
+    const job = await res.json();
+
+    progressWrap.style.display = 'block';
+    const pct = job.total > 0 ? Math.round((job.current / job.total) * 100) : (job.status === 'done' ? 100 : 5);
+    progressFill.style.width = pct + '%';
+    const label = STAGE_LABELS[job.stage] || job.message || job.stage;
+    progressLabel.textContent = job.total > 0
+      ? `${label} (${job.current}/${job.total})`
+      : label;
+
+    setBadge(job.status);
+
+    if (job.status === 'done') {
+      clearInterval(pollTimer);
+      translateBtn.disabled = false;
+      translateBtn.textContent = 'Bắt đầu dịch';
+      const stats = job.result || {};
+      resultBox.style.display = 'block';
+      resultBox.innerHTML = `
+        <strong>Dịch xong!</strong>
+        <ul class="stats-list">
+          <li>Ngôn ngữ nguồn phát hiện: <strong>${stats.source_lang === 'zh' ? 'Tiếng Trung' : 'Tiếng Anh'}</strong></li>
+          <li>Số trang: ${stats.page_count ?? '-'}</li>
+          <li>Số đoạn văn bản đã dịch: ${stats.translated_block_count ?? '-'} / ${stats.block_count ?? '-'}</li>
+        </ul>
+        <div style="margin-top:12px;">
+          <button id="downloadBtn">⬇️ Tải file PDF đã dịch</button>
+        </div>
+      `;
+      document.getElementById('downloadBtn').addEventListener('click', () => {
+        window.location.href = `/api/jobs/${jobId}/download`;
+      });
+    } else if (job.status === 'error') {
+      clearInterval(pollTimer);
+      translateBtn.disabled = false;
+      translateBtn.textContent = 'Bắt đầu dịch';
+      errorBox.style.display = 'block';
+      errorBox.textContent = job.error || 'Đã có lỗi không xác định xảy ra.';
+    }
+  } catch (err) {
+    clearInterval(pollTimer);
+    translateBtn.disabled = false;
+    translateBtn.textContent = 'Bắt đầu dịch';
+    errorBox.style.display = 'block';
+    errorBox.textContent = 'Lỗi khi theo dõi tiến trình: ' + err.message;
+  }
+}
+
+translateBtn.addEventListener('click', async () => {
+  if (!selectedFile) return;
+  resetOutputPanels();
+  translateBtn.disabled = true;
+  translateBtn.textContent = 'Đang tải lên...';
+
+  const formData = new FormData();
+  formData.append('file', selectedFile);
+  if (apiKeyInput.value.trim()) formData.append('api_key', apiKeyInput.value.trim());
+  if (baseUrlInput.value.trim()) formData.append('deepseek_base_url', baseUrlInput.value.trim());
+  if (modelInput.value.trim()) formData.append('deepseek_model', modelInput.value.trim());
+
+  try {
+    const res = await fetch('/api/jobs', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.detail || 'Không thể tạo job dịch.');
+    }
+    currentJobId = data.job_id;
+    translateBtn.textContent = 'Đang dịch...';
+    progressWrap.style.display = 'block';
+    pollTimer = setInterval(() => pollJob(currentJobId), 1200);
+    pollJob(currentJobId);
+  } catch (err) {
+    translateBtn.disabled = false;
+    translateBtn.textContent = 'Bắt đầu dịch';
+    errorBox.style.display = 'block';
+    errorBox.textContent = err.message;
+  }
+});
+</script>
+</body>
+</html>
